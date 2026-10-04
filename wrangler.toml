@@ -15,7 +15,7 @@ FAILURE_ALERT_THRESHOLD = "10"
 [[d1_databases]]
 binding = "DB"
 database_name = "44-telegram"
-database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+database_id = "7e5b9e22-3787-4fe8-ba2c-b785ccb613ed"
 migrations_dir = "migrations"
 
 [observability]
