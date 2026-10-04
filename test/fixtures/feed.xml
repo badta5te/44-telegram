@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:wfw="http://wellformedweb.org/CommentAPI/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:media="http://www.rssboard.org/media-rss" version="2.0">
+<channel>
+<title>Shop - 44 Label Group</title>
+<link>https://44-label.group/shop/</link>
+<item>
+<title>SOMEWHEN – 44030 12" VINYL [PRE-ORDER]</title>
+<pubDate>Fri, 02 Oct 2026 09:59:05 +0000</pubDate>
+<link>https://44-label.group/shop/somewhen-44030-vinyl</link>
+<guid isPermaLink="false">59a0612acd39c3292adaf073:59b3ca5d3e00be04aba0c387:6ab30d0f44aea31d23df09f8</guid>
+<description><![CDATA[PRE-ORDER!
+ORDERS WILL BE SHIPPED: JANUARY 2027]]></description>
+<content:encoded><![CDATA[<p>PRE-ORDER!</p>]]></content:encoded>
+<media:content type="image/jpeg" url="https://images.squarespace-cdn.com/content/v1/59a0612acd39c3292adaf073/somewhen.jpg?format=1500w" medium="image" isDefault="true" width="1500" height="1500"><media:title type="plain">SOMEWHEN – 44030 12" VINYL [PRE-ORDER]</media:title></media:content>
+</item>
+<item>
+<title>AZZEL 447 &amp; FRIENDS – 44029 12" VINYL [PRE-ORDER]</title>
+<pubDate>Fri, 04 Sep 2026 10:00:01 +0000</pubDate>
+<link>https://44-label.group/shop/azzel-447-44029-vinyl</link>
+<guid isPermaLink="false">59a0612acd39c3292adaf073:59b3ca5d3e00be04aba0c387:6a96cbc3c90e0742ca2c319a</guid>
+<description><![CDATA[PRE-ORDER!
+ORDERS WILL BE SHIPPED: 09.11.2026]]></description>
+<media:content type="image/jpeg" url="https://images.squarespace-cdn.com/content/v1/59a0612acd39c3292adaf073/azzel.jpg?format=1500w&amp;x=1" medium="image" isDefault="true" width="1500" height="1500"><media:title type="plain">AZZEL 447</media:title></media:content>
+</item>
+<item>
+<title>44 LABEL T-SHIRT</title>
+<pubDate>Thu, 01 Jan 2026 18:00:00 +0000</pubDate>
+<link>https://44-label.group/shop/tshirt</link>
+<guid isPermaLink="false">59a0612acd39c3292adaf073:59b3ca5d3e00be04aba0c387:old</guid>
+<description></description>
+</item>
+</channel>
+</rss>

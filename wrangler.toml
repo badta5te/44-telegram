@@ -1,0 +1,24 @@
+name = "44-telegram"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# Every minute; the worker itself polls more often around the top of the hour.
+[triggers]
+crons = ["* * * * *"]
+
+[vars]
+FEED_URL = "https://44-label.group/shop?format=rss"
+BURST_MINUTES = "59,0,1,2"
+BURST_INTERVAL_SEC = "15"
+FAILURE_ALERT_THRESHOLD = "10"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "44-telegram"
+database_id = "REPLACE_WITH_ID_FROM_wrangler_d1_create"
+migrations_dir = "migrations"
+
+[observability]
+enabled = true
+
+# Secrets (set with `wrangler secret put`): TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
