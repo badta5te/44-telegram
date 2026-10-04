@@ -1,54 +1,55 @@
 # 44-telegram
 
-Telegram-бот, который присылает оповещение о каждой новой пластинке на [44-label.group](https://44-label.group/shop).
+A Telegram bot that alerts you about every new record on [44-label.group](https://44-label.group/shop).
 
-## Как работает
+## How it works
 
-- Cloudflare Worker запускается по cron раз в минуту и читает RSS магазина `https://44-label.group/shop?format=rss`.
-- В минуты `:59, :00, :01, :02` (UTC) воркер опрашивает ленту каждые 15 секунд, потому что релизы выходят ровно в начале часа.
-- Уже виденные товары хранятся в D1 по `guid`. Новый `guid` означает новую позицию: бот присылает фото, название, цену (берёт со страницы товара), пометку о предзаказе и кнопку на магазин.
-- При первом запуске всё, что уже есть в ленте, запоминается молча, чтобы не прислать 20 старых пластинок.
-- Если ленту не удаётся прочитать 10 раз подряд, бот предупреждает, а когда всё восстановится, пишет об этом.
+- A Cloudflare Worker runs on a cron every minute and reads the shop's RSS feed at `https://44-label.group/shop?format=rss`.
+- During minutes `:59, :00, :01, :02` (UTC) the worker polls every 15 seconds, because releases go live exactly on the hour.
+- Seen items are stored in D1 by `guid`. A new `guid` means a new item: the bot sends the cover photo, title, price (taken from the product page), a pre-order mark and a button linking to the shop.
+- On the first run everything already in the feed is remembered silently, so you don't get 20 old records at once.
+- If an alert fails to send, it is retried on the next poll.
+- If the feed can't be read 10 times in a row, the bot warns you, and tells you again once it recovers.
 
-## Деплой
+## Deploy
 
-Нужен аккаунт Cloudflare (бесплатного плана хватает) и Node.js 20+.
+You need a Cloudflare account (the free plan is enough) and Node.js 20+.
 
 ```sh
 npm install
 npx wrangler login
 
-# База для виденных позиций; скопируй database_id в wrangler.toml
+# Database for seen items; copy database_id into wrangler.toml
 npx wrangler d1 create 44-telegram
 npm run db:migrate
 
-# Секреты
-npx wrangler secret put TELEGRAM_BOT_TOKEN   # токен от @BotFather
-npx wrangler secret put TELEGRAM_CHAT_ID     # твой chat id, можно несколько через запятую
+# Secrets
+npx wrangler secret put TELEGRAM_BOT_TOKEN   # token from @BotFather
+npx wrangler secret put TELEGRAM_CHAT_ID     # your chat id, several allowed, comma-separated
 
 npm run deploy
 ```
 
-Чтобы узнать `TELEGRAM_CHAT_ID`, напиши боту любое сообщение и открой
-`https://api.telegram.org/bot<ТОКЕН>/getUpdates`: нужное число лежит в `message.chat.id`.
+To find your `TELEGRAM_CHAT_ID`, send the bot any message and open
+`https://api.telegram.org/bot<TOKEN>/getUpdates`: the number is in `message.chat.id`.
 
-## Проверка
+## Testing
 
-После деплоя в течение минуты придёт сообщение «Бот запущен». Чтобы получить тестовое оповещение о настоящей пластинке, удали её из базы, и бот пришлёт её на следующем опросе:
+Within a minute of deploying you'll get a "bot started" message. To get a test alert for a real record, delete it from the database and the bot will send it on the next poll:
 
 ```sh
 npx wrangler d1 execute 44-telegram --remote \
   --command "DELETE FROM seen WHERE guid = (SELECT guid FROM seen ORDER BY rowid LIMIT 1)"
 ```
 
-Логи: `npx wrangler tail`.
+Logs: `npx wrangler tail`.
 
-## Разработка
+## Development
 
 ```sh
-npm test          # парсер ленты, цена, логика оповещений
+npm test          # feed parser, price, alert logic
 npm run typecheck
-npm run dev       # локально; cron дёргается через curl "http://localhost:8787/__scheduled"
+npm run dev       # local run; trigger the cron with curl "http://localhost:8787/__scheduled"
 ```
 
-Настройки в `wrangler.toml` → `[vars]`: адрес ленты, минуты частого опроса, интервал и порог предупреждения о сбоях.
+Settings live in `wrangler.toml` under `[vars]`: feed URL, burst minutes, burst interval and the failure warning threshold.
