@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { isPreOrder, parseFeed } from "../src/feed";
+import { feedGuids, isPreOrder, parseFeed } from "../src/feed";
 import { extractPrice } from "../src/price";
 import { buildCaption } from "../src/telegram";
 
@@ -62,5 +62,11 @@ describe("buildCaption", () => {
     expect(caption).toContain("💶 28.00 €");
     expect(caption).toContain("📦 Предзаказ");
     expect(caption).toContain("https://44-label.group/shop/azzel-447-44029-vinyl");
+  });
+});
+
+describe("feedGuids", () => {
+  it("matches the guids of a full parse", () => {
+    expect(feedGuids(xml)).toEqual(parseFeed(xml).map((i) => i.guid));
   });
 });

@@ -30,6 +30,14 @@ export function parseFeed(xml: string): FeedItem[] {
   return items;
 }
 
+// Most polls see a feed with nothing new, so they only need the guids: one cheap scan
+// instead of a full parse keeps a run inside the 10 ms free-tier CPU limit.
+export function feedGuids(xml: string): string[] {
+  return [...xml.matchAll(/<guid(?:\s[^>]*)?>([\s\S]*?)<\/guid>/g)]
+    .map(([, guid]) => decode(guid).trim())
+    .filter(Boolean);
+}
+
 export function isPreOrder(item: FeedItem): boolean {
   return item.title.toUpperCase().includes(PRE_ORDER_MARK);
 }
