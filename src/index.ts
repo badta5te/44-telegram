@@ -1,4 +1,4 @@
-import { FeedItem, parseFeed } from "./feed";
+import { FeedItem, feedGuids, parseFeed } from "./feed";
 import { fetchPrice, USER_AGENT } from "./price";
 import { sendAlert, sendText } from "./telegram";
 
@@ -38,9 +38,13 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 export async function poll(env: Env): Promise<void> {
-  let items: FeedItem[];
+  let xml: string;
+  let guids: string[];
   try {
-    items = await fetchFeed(env.FEED_URL);
+    xml = await fetchFeed(env.FEED_URL);
+    guids = feedGuids(xml);
+    // An empty feed means a broken response, not a shop with no records.
+    if (guids.length === 0) throw new Error("feed has no items");
   } catch (err) {
     console.error("feed fetch failed", err);
     await recordFailure(env);
@@ -49,17 +53,21 @@ export async function poll(env: Env): Promise<void> {
   await recordSuccess(env);
 
   // One query for the whole feed instead of one per item keeps each run cheap.
-  const known = await knownItems(env, items);
+  const known = await knownItems(env, guids);
   if (known.size === 0 && (await isFirstRun(env))) {
+    const items = parseFeed(xml);
     await seed(env, items);
     await broadcast(env, `Бот запущен. Слежу за ${env.FEED_URL}, уже в ленте: ${items.length}.`);
     return;
   }
 
+  const pending = new Set(guids.filter((g) => !known.has(g) || isStalePending(known.get(g)!)));
+  if (pending.size === 0) return;
+
   // Oldest first, so several new records arrive in release order.
-  for (const item of [...items].reverse()) {
+  const items = parseFeed(xml).filter((i) => pending.has(i.guid));
+  for (const item of items.reverse()) {
     const row = known.get(item.guid);
-    if (row && !isStalePending(row)) continue;
     if (!(await claim(env, item, row))) continue;
     try {
       const price = await fetchPrice(item.link);
@@ -92,28 +100,24 @@ function isStalePending(row: SeenRow): boolean {
   return row.sent_at === null && Date.now() - Date.parse(row.first_seen_at) > STALE_CLAIM_MS;
 }
 
-async function knownItems(env: Env, items: FeedItem[]): Promise<Map<string, SeenRow>> {
-  const placeholders = items.map(() => "?").join(",");
+async function knownItems(env: Env, guids: string[]): Promise<Map<string, SeenRow>> {
+  const placeholders = guids.map(() => "?").join(",");
   const { results } = await env.DB.prepare(
     `SELECT guid, first_seen_at, sent_at FROM seen WHERE guid IN (${placeholders})`,
   )
-    .bind(...items.map((i) => i.guid))
+    .bind(...guids)
     .all<SeenRow>();
   return new Map(results.map((r) => [r.guid, r]));
 }
 
-async function fetchFeed(url: string): Promise<FeedItem[]> {
+async function fetchFeed(url: string): Promise<string> {
   const res = await fetch(url, {
     headers: { "User-Agent": USER_AGENT, Accept: "application/rss+xml, application/xml" },
     cf: { cacheTtl: 0 },
     signal: AbortSignal.timeout(10_000),
   });
   if (!res.ok) throw new Error(`feed responded ${res.status}`);
-
-  const items = parseFeed(await res.text());
-  // An empty feed means a broken response, not a shop with no records.
-  if (items.length === 0) throw new Error("feed has no items");
-  return items;
+  return res.text();
 }
 
 // Both statements are atomic compare-and-set, so overlapping polls can't alert the same item twice.
