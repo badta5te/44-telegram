@@ -4,7 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Env, poll } from "../src/index";
 
 const xml = readFileSync(new URL("./fixtures/feed.xml", import.meta.url), "utf8");
-const schema = readFileSync(new URL("../migrations/0001_init.sql", import.meta.url), "utf8");
+const schema = ["0001_init.sql", "0002_sent_at.sql"]
+  .map((f) => readFileSync(new URL(`../migrations/${f}`, import.meta.url), "utf8"))
+  .join("\n");
 
 // Just enough of the D1 API, backed by an in-memory SQLite.
 function fakeD1(): D1Database {
@@ -16,6 +18,9 @@ function fakeD1(): D1Database {
     async run() {
       const r = db.prepare(sql).run(...(params as never[]));
       return { meta: { changes: Number(r.changes) } };
+    },
+    async all() {
+      return { results: db.prepare(sql).all(...(params as never[])) };
     },
     async first(column?: string) {
       const row = db.prepare(sql).get(...(params as never[])) as Record<string, unknown> | undefined;
@@ -32,9 +37,9 @@ function fakeD1(): D1Database {
   } as unknown as D1Database;
 }
 
-function makeEnv(): Env {
+function makeEnv(db = fakeD1()): Env {
   return {
-    DB: fakeD1(),
+    DB: db,
     TELEGRAM_BOT_TOKEN: "TOKEN",
     TELEGRAM_CHAT_ID: "42",
     FEED_URL: "https://44-label.group/shop?format=rss",
@@ -111,6 +116,32 @@ describe("poll", () => {
     telegram = [];
     await poll(env);
     expect(telegram.map((t) => t.method)).toEqual(["sendPhoto"]);
+  });
+
+  it("resends an alert whose run died after claiming it", async () => {
+    const env = makeEnv();
+    await poll(env);
+    feed = xml.replace("<item>", `${NEW_ITEM}<item>`);
+
+    // Simulate a run killed between claim and send.
+    const claimedAt = new Date(Date.now() - 30_000).toISOString();
+    await env.DB.prepare("INSERT INTO seen (guid, title, link, first_seen_at) VALUES (?, ?, ?, ?)")
+      .bind("a:b:new", "NEW", "https://44-label.group/shop/new-44031", claimedAt)
+      .run();
+
+    telegram = [];
+    await poll(env);
+    expect(telegram).toEqual([]); // a fresh claim may still be in flight
+
+    await env.DB.prepare("UPDATE seen SET first_seen_at = ? WHERE guid = ?")
+      .bind(new Date(Date.now() - 5 * 60_000).toISOString(), "a:b:new")
+      .run();
+    await poll(env);
+    expect(telegram.map((t) => t.method)).toEqual(["sendPhoto"]);
+
+    telegram = [];
+    await poll(env);
+    expect(telegram).toEqual([]);
   });
 
   it("warns once after repeated feed failures and once on recovery", async () => {

@@ -48,7 +48,9 @@ export async function poll(env: Env): Promise<void> {
   }
   await recordSuccess(env);
 
-  if (await isFirstRun(env)) {
+  // One query for the whole feed instead of one per item keeps each run cheap.
+  const known = await knownItems(env, items);
+  if (known.size === 0 && (await isFirstRun(env))) {
     await seed(env, items);
     await broadcast(env, `Бот запущен. Слежу за ${env.FEED_URL}, уже в ленте: ${items.length}.`);
     return;
@@ -56,12 +58,17 @@ export async function poll(env: Env): Promise<void> {
 
   // Oldest first, so several new records arrive in release order.
   for (const item of [...items].reverse()) {
-    if (!(await claim(env, item))) continue;
+    const row = known.get(item.guid);
+    if (row && !isStalePending(row)) continue;
+    if (!(await claim(env, item, row))) continue;
     try {
       const price = await fetchPrice(item.link);
       for (const chatId of chatIds(env)) {
         await sendAlert(env.TELEGRAM_BOT_TOKEN, chatId, item, price);
       }
+      await env.DB.prepare("UPDATE seen SET sent_at = ? WHERE guid = ?")
+        .bind(new Date().toISOString(), item.guid)
+        .run();
       console.log("alerted", item.guid, item.title);
     } catch (err) {
       // Release the claim so the next poll retries this item.
@@ -69,6 +76,30 @@ export async function poll(env: Env): Promise<void> {
       await env.DB.prepare("DELETE FROM seen WHERE guid = ?").bind(item.guid).run();
     }
   }
+}
+
+interface SeenRow {
+  guid: string;
+  first_seen_at: string;
+  sent_at: string | null;
+}
+
+// A run killed mid-alert (CPU limit, deploy, crash) leaves a claimed but unsent row.
+// After this long we assume its run is dead and send the alert again.
+const STALE_CLAIM_MS = 2 * 60_000;
+
+function isStalePending(row: SeenRow): boolean {
+  return row.sent_at === null && Date.now() - Date.parse(row.first_seen_at) > STALE_CLAIM_MS;
+}
+
+async function knownItems(env: Env, items: FeedItem[]): Promise<Map<string, SeenRow>> {
+  const placeholders = items.map(() => "?").join(",");
+  const { results } = await env.DB.prepare(
+    `SELECT guid, first_seen_at, sent_at FROM seen WHERE guid IN (${placeholders})`,
+  )
+    .bind(...items.map((i) => i.guid))
+    .all<SeenRow>();
+  return new Map(results.map((r) => [r.guid, r]));
 }
 
 async function fetchFeed(url: string): Promise<FeedItem[]> {
@@ -85,13 +116,17 @@ async function fetchFeed(url: string): Promise<FeedItem[]> {
   return items;
 }
 
-// INSERT OR IGNORE is atomic, so overlapping polls can't alert the same item twice.
-async function claim(env: Env, item: FeedItem): Promise<boolean> {
-  const result = await env.DB.prepare(
-    "INSERT OR IGNORE INTO seen (guid, title, link, first_seen_at) VALUES (?, ?, ?, ?)",
-  )
-    .bind(item.guid, item.title, item.link, new Date().toISOString())
-    .run();
+// Both statements are atomic compare-and-set, so overlapping polls can't alert the same item twice.
+async function claim(env: Env, item: FeedItem, stale?: SeenRow): Promise<boolean> {
+  const now = new Date().toISOString();
+  const stmt = stale
+    ? env.DB.prepare(
+        "UPDATE seen SET first_seen_at = ? WHERE guid = ? AND sent_at IS NULL AND first_seen_at = ?",
+      ).bind(now, item.guid, stale.first_seen_at)
+    : env.DB.prepare(
+        "INSERT OR IGNORE INTO seen (guid, title, link, first_seen_at) VALUES (?, ?, ?, ?)",
+      ).bind(item.guid, item.title, item.link, now);
+  const result = await stmt.run();
   return result.meta.changes > 0;
 }
 
@@ -104,9 +139,9 @@ async function isFirstRun(env: Env): Promise<boolean> {
 async function seed(env: Env, items: FeedItem[]): Promise<void> {
   const now = new Date().toISOString();
   const stmt = env.DB.prepare(
-    "INSERT OR IGNORE INTO seen (guid, title, link, first_seen_at) VALUES (?, ?, ?, ?)",
+    "INSERT OR IGNORE INTO seen (guid, title, link, first_seen_at, sent_at) VALUES (?, ?, ?, ?, ?)",
   );
-  await env.DB.batch(items.map((i) => stmt.bind(i.guid, i.title, i.link, now)));
+  await env.DB.batch(items.map((i) => stmt.bind(i.guid, i.title, i.link, now, now)));
 }
 
 // A silently broken bot means a missed drop, so say when polling keeps failing.
